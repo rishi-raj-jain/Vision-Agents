@@ -251,20 +251,26 @@ func redactedAttr(attr slog.Attr, text string) slog.Attr {
 	return attr
 }
 
+// redactOperatorText is text with credentials taken out and phone numbers masked, for what
+// operators read. RedactLogText alone stays for text customers see.
+func redactOperatorText(key, text string) string {
+	return maskLogText(key, RedactLogText(text))
+}
+
 // RedactSentryEvent is a sentry BeforeSend that puts an event's message, its exceptions'
 // values, its breadcrumbs' messages, its tags and every string in its contexts through
 // RedactLogText: they are an error's text, which can echo the key a provider was sent, as a
 // usage alert's context does (internal/alerts).
 func RedactSentryEvent(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-	event.Message = RedactLogText(event.Message)
+	event.Message = redactOperatorText("", event.Message)
 	for i := range event.Exception {
-		event.Exception[i].Value = RedactLogText(event.Exception[i].Value)
+		event.Exception[i].Value = redactOperatorText("", event.Exception[i].Value)
 	}
 	for _, breadcrumb := range event.Breadcrumbs {
-		breadcrumb.Message = RedactLogText(breadcrumb.Message)
+		breadcrumb.Message = redactOperatorText("", breadcrumb.Message)
 	}
 	for key, value := range event.Tags {
-		event.Tags[key] = RedactLogText(value)
+		event.Tags[key] = redactOperatorText(key, value)
 	}
 	walk := &contextWalk{budget: maxContextNodes}
 	for name, context := range event.Contexts {
@@ -296,7 +302,7 @@ type contextWalk struct {
 func (w *contextWalk) context(context map[string]any) map[string]any {
 	out := make(map[string]any, len(context))
 	for key, value := range context {
-		out[key] = w.value(value)
+		out[key] = w.value(key, value)
 	}
 	return out
 }
@@ -305,9 +311,11 @@ func (w *contextWalk) context(context map[string]any) map[string]any {
 // another type is read as the JSON Sentry sends of it and, when that JSON holds a credential,
 // replaced by it decoded and redacted. Decoded, it holds only maps, slices, strings and
 // numbers, booleans and nulls, whose JSON no rule matches, so none is read as JSON again.
-func (w *contextWalk) value(value any) any {
+// A typed value is decoded only if a rule would change its JSON as a whole under the parent
+// key, so a national number under a caller key inside a struct stays. None is sent today.
+func (w *contextWalk) value(key string, value any) any {
 	if text, ok := value.(string); ok {
-		return RedactLogText(text)
+		return redactOperatorText(key, text)
 	}
 	if w.budget <= 0 {
 		return value
@@ -322,12 +330,12 @@ func (w *contextWalk) value(value any) any {
 		}
 		out := make([]any, len(typed))
 		for i, inner := range typed {
-			out[i] = w.value(inner)
+			out[i] = w.value(key, inner)
 		}
 		return out
 	}
 	text, err := json.Marshal(value)
-	if err != nil || RedactLogText(string(text)) == string(text) {
+	if err != nil || redactOperatorText(key, string(text)) == string(text) {
 		return value
 	}
 	decoder := json.NewDecoder(bytes.NewReader(text))
@@ -336,7 +344,7 @@ func (w *contextWalk) value(value any) any {
 	if err := decoder.Decode(&decoded); err != nil {
 		return value
 	}
-	return w.value(decoded)
+	return w.value(key, decoded)
 }
 
 func safeLogDetails(details map[string]any) map[string]any {
