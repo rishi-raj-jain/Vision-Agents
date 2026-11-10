@@ -47,6 +47,8 @@ type CallHooksSuite struct {
 	stats *recordedStats
 	// logged is what the router logged, at debug and up.
 	logged *lockedLog
+	// since is how much of logged had been written when the current test started.
+	since int
 }
 
 func TestCallHooksSuite(t *testing.T) {
@@ -63,6 +65,7 @@ func (s *CallHooksSuite) SetupSuite() {
 }
 
 func (s *CallHooksSuite) SetupTest() {
+	s.since = len(s.logged.String())
 	s.useApp(s.data.createApp())
 	s.e164 = s.utils.number()
 	s.callID = "phone-" + s.e164
@@ -132,8 +135,8 @@ func (s *CallHooksSuite) TestACallToASuspendedAppIsNotAnsweredAndIsEnded() {
 	s.Require().Equal(http.StatusOK, s.arrive("default:"+s.callID))
 
 	s.nothingReaches(worker.Calls(), "a suspended app's agent answered a call")
-	s.Contains(s.logged.String(), "refused an arriving call to a suspended app; ending it")
-	s.Eventually(func() bool { return strings.Contains(s.logged.String(), "could not end a refused arriving call") },
+	s.Contains(s.thisTest(), "refused an arriving call to a suspended app; ending it")
+	s.Eventually(func() bool { return strings.Contains(s.thisTest(), "could not end a refused arriving call") },
 		5*time.Second, 20*time.Millisecond, "ended at Stream, which the suite's phone service has no credentials for")
 }
 
@@ -143,7 +146,7 @@ func (s *CallHooksSuite) TestACallNoWorkerCanTakeIsEnded() {
 	s.Require().Equal(http.StatusOK, s.arrive("default:"+s.callID))
 
 	s.True(s.refused(), "a caller nobody answers is left listening to silence")
-	s.Eventually(func() bool { return strings.Contains(s.logged.String(), "could not end a refused arriving call") },
+	s.Eventually(func() bool { return strings.Contains(s.thisTest(), "could not end a refused arriving call") },
 		5*time.Second, 20*time.Millisecond, "ended at Stream, which the suite's phone service has no credentials for")
 }
 
@@ -191,9 +194,13 @@ func (s *CallHooksSuite) loggedAs(id string) string {
 	return strings.Replace(id, s.e164, "+1•••"+s.e164[len(s.e164)-2:], 1)
 }
 
+// thisTest is what the current test logged, so a line another test logged for a number
+// that masks the same way is not read as this test's.
+func (s *CallHooksSuite) thisTest() string { return s.logged.String()[s.since:] }
+
 // loggedLine reports whether one line of the log holds every part.
 func (s *CallHooksSuite) loggedLine(parts ...string) bool {
-	for line := range strings.Lines(s.logged.String()) {
+	for line := range strings.Lines(s.thisTest()) {
 		found := true
 		for _, part := range parts {
 			found = found && strings.Contains(line, part)
@@ -404,7 +411,7 @@ func (s *CallHooksSuite) refused() bool {
 // refusedCall is refused for one call. It reads no field a later test sets, so a check still
 // running when its test ends cannot race with the next one.
 func (s *CallHooksSuite) refusedCall(callID string) bool {
-	for _, line := range strings.Split(s.logged.String(), "\n") {
+	for _, line := range strings.Split(s.thisTest(), "\n") {
 		if strings.Contains(line, "refused an arriving call") && strings.Contains(line, s.loggedAs(callID)) {
 			return true
 		}
@@ -703,7 +710,7 @@ func (s *CallHooksSuite) TestAnArrivingCallToANumberWhoseAgentIsGoneIsRefused() 
 
 	s.nothingReaches(worker.Calls(), "a number whose agent is gone fell back to a worker")
 	s.Eventually(func() bool {
-		return strings.Contains(s.logged.String(), "refused an arriving call to a number whose agent is gone")
+		return strings.Contains(s.thisTest(), "refused an arriving call to a number whose agent is gone")
 	}, settleFor, 10*time.Millisecond)
 	_, live := s.router.sessions.Get(s.callID, session.Owner{CustomerID: s.customerID()})
 	s.False(live)
@@ -718,7 +725,7 @@ func (s *CallHooksSuite) TestAnArrivingCallWhoseAgentCannotOpenASessionIsEnded()
 	s.Require().Equal(http.StatusOK, s.arriveRingingNumberOn("agent"))
 
 	s.Eventually(func() bool {
-		return strings.Contains(s.logged.String(), "refused an arriving call its agent could not answer")
+		return strings.Contains(s.thisTest(), "refused an arriving call its agent could not answer")
 	}, settleFor, 10*time.Millisecond, "a caller whose agent never joined is left listening to silence")
 }
 
@@ -825,8 +832,8 @@ func (s *CallHooksSuite) TestAnEndedInboundCallsRowNamesTheNumbersSIPHost() {
 func (s *CallHooksSuite) TestAnEndedCallRingingANumberNobodyHoldsIsWarnedAbout() {
 	s.Require().Equal(http.StatusOK, s.end(fmt.Sprintf(`{"phone_number":%q}`, s.e164)))
 
-	s.Contains(s.logged.String(), "could not tell whose number an ended call rang")
-	s.NotContains(s.logged.String(), "no number +1•••"+s.e164[len(s.e164)-2:]+" is attached")
+	s.Contains(s.thisTest(), "could not tell whose number an ended call rang")
+	s.NotContains(s.thisTest(), "no number +1•••"+s.e164[len(s.e164)-2:]+" is attached")
 	s.NotContains(s.logged.String(), "no number "+s.e164+" is attached")
 }
 
@@ -859,7 +866,7 @@ func (s *CallHooksSuite) TestTheWebhookIsAnsweredBeforeTheStatsAreRead() {
 // sitesLine is the router's "phone call sites" line for the suite's call.
 func (s *CallHooksSuite) sitesLine() string {
 	var found []string
-	for line := range strings.Lines(s.logged.String()) {
+	for line := range strings.Lines(s.thisTest()) {
 		if strings.Contains(line, `msg="phone call sites"`) && strings.Contains(line, "session_id="+s.loggedAs(s.callID)+" ") {
 			found = append(found, line)
 		}
