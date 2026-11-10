@@ -697,7 +697,6 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (_ *Session, failure er
 	var callers agent.ToolRunner = created.tools
 	tools, callers = m.hostedTools(spec, created.id, hostedProgress{created}, tools, callers)
 	tools, callers = moderationTools(spec, stream, tools, callers)
-	tools, callers = m.childAgents(spec, created, tools, callers)
 	if line != nil || m.reading(spec) || m.searching(spec) || spec.endsCalls() {
 		builtin, err := harness.DefaultTools()
 		if err != nil {
@@ -745,6 +744,8 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (_ *Session, failure er
 		created.closers = append(created.closers, connectors.Close, connectors.closeLogins)
 	}
 	created.connectorsUnavailable = connectorsUnavailable
+	// Last, so every other tool's name is taken first and a child cannot shadow one.
+	tools, runner = m.childAgents(spec, created, tools, runner)
 	if spec.ProgressiveTools {
 		tools, runner = progressively(tools, connectorTools, runner)
 	}
