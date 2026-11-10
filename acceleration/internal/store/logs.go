@@ -242,9 +242,10 @@ func RedactJSONLogAttr(_ []string, attr slog.Attr) slog.Attr {
 	return redactedAttr(attr, string(text))
 }
 
-// redactedAttr is attr with its value replaced by text redacted, if that took anything out.
+// redactedAttr is attr with its value replaced by text redacted and masked (logMasks), if that
+// changed anything.
 func redactedAttr(attr slog.Attr, text string) slog.Attr {
-	if redacted := RedactLogText(text); redacted != text {
+	if redacted := maskLogText(attr.Key, RedactLogText(text)); redacted != text {
 		return slog.String(attr.Key, redacted)
 	}
 	return attr
