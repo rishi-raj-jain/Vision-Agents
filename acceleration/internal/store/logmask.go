@@ -26,6 +26,10 @@ type logMask struct {
 // monotonic m=+1234567.89 of a time.Time printed with %+v, which is harmless. Its separators
 // of up to 2 characters can swallow a number right after one ("+15550001101 2 times" masks as
 // "+1•••12"), which still hides the number.
+//
+// Known limit: a number written without + (Vonage and Plivo send it so) is masked only under the
+// number, caller, to and from keys, so one echoed inside an error text stays. A rule for any bare
+// digit run would mask ids and timestamps.
 var logMasks = []logMask{
 	{
 		may:     func(text string) bool { return strings.Contains(text, "sip-") },

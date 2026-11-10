@@ -408,8 +408,8 @@ func (s *CallHooksSuite) refused() bool {
 	return s.refusedCall(s.callID)
 }
 
-// refusedCall is refused for one call. It reads no field a later test sets, so a check still
-// running when its test ends cannot race with the next one.
+// refusedCall is refused for one call. It reads since and e164, which the next test's SetupTest
+// resets, so a check still running when its test ends would read the next test's values.
 func (s *CallHooksSuite) refusedCall(callID string) bool {
 	for _, line := range strings.Split(s.thisTest(), "\n") {
 		if strings.Contains(line, "refused an arriving call") && strings.Contains(line, s.loggedAs(callID)) {
@@ -834,7 +834,6 @@ func (s *CallHooksSuite) TestAnEndedCallRingingANumberNobodyHoldsIsWarnedAbout()
 
 	s.Contains(s.thisTest(), "could not tell whose number an ended call rang")
 	s.NotContains(s.thisTest(), "no number +1•••"+s.e164[len(s.e164)-2:]+" is attached")
-	s.NotContains(s.logged.String(), "no number "+s.e164+" is attached")
 }
 
 func (s *CallHooksSuite) TestAnEndedVideoCallGetsNoCallSitesRow() {

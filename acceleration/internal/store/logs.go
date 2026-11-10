@@ -199,7 +199,8 @@ func redactUnlessWord(rule *regexp.Regexp, text string) string {
 
 // RedactLogAttr is a slog ReplaceAttr that puts every logged string, the message included, and
 // every error or other value through RedactLogText, since a provider's error can echo the key
-// it was sent. A value is read as %+v, which is how slog's text handler prints an error (with
+// it was sent. Phone numbers and caller ids in them are masked with logMasks (logmask.go) too.
+// A value is read as %+v, which is how slog's text handler prints an error (with
 // its stack, see internal/stack) or a map of details, but for a []byte, which it prints as a
 // string. An attribute with nothing to redact is returned as is, so its line does not change.
 func RedactLogAttr(_ []string, attr slog.Attr) slog.Attr {
@@ -260,7 +261,8 @@ func redactOperatorText(key, text string) string {
 // RedactSentryEvent is a sentry BeforeSend that puts an event's message, its exceptions'
 // values, its breadcrumbs' messages, its tags and every string in its contexts through
 // RedactLogText: they are an error's text, which can echo the key a provider was sent, as a
-// usage alert's context does (internal/alerts).
+// usage alert's context does (internal/alerts). Phone numbers and caller ids in them are masked
+// with logMasks (logmask.go) too.
 func RedactSentryEvent(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 	event.Message = redactOperatorText("", event.Message)
 	for i := range event.Exception {
