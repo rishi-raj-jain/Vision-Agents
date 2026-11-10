@@ -147,6 +147,64 @@ func (s *CallHooksSuite) TestACallNoWorkerCanTakeIsEnded() {
 		5*time.Second, 20*time.Millisecond, "ended at Stream, which the suite's phone service has no credentials for")
 }
 
+func (s *CallHooksSuite) TestNoLogLineOfAnArrivingCallHoldsANumber() {
+	s.hold("default", s.callID)
+	worker, release := s.dispatch.Register(s.customerID(), dispatch.Registration{Capacity: 1})
+	defer release()
+
+	s.Require().Equal(http.StatusOK, s.arrive("default:"+s.callID))
+
+	select {
+	case <-worker.Calls():
+	case <-time.After(settleFor):
+		s.FailNow("the call never reached the worker")
+	}
+	masked := "+1•••" + s.e164[len(s.e164)-2:]
+	s.Eventually(func() bool {
+		return s.loggedLine("handed an arriving call to a worker", "caller=+1•••11", "number="+masked, "session_id=session-1")
+	}, settleFor, 20*time.Millisecond, "no line tied the handed call to its session without a number")
+	s.holdsNoNumber()
+}
+
+func (s *CallHooksSuite) TestNoLogLineOfACallNobodyAnswersHoldsANumber() {
+	s.hold("default", s.callID)
+
+	s.Require().Equal(http.StatusOK, s.arrive("default:"+s.callID))
+
+	masked := "+1•••" + s.e164[len(s.e164)-2:]
+	s.Eventually(func() bool {
+		return s.loggedLine("nobody could answer an arriving call", "number="+masked, "session_id=session-1")
+	}, settleFor, 20*time.Millisecond, "no line tied the unanswered call to its session without a number")
+	s.holdsNoNumber()
+}
+
+// holdsNoNumber fails when the log names the caller's or the called number in any form.
+func (s *CallHooksSuite) holdsNoNumber() {
+	logged := s.logged.String()
+	s.NotContains(logged, strings.TrimPrefix(s.e164, "+"))
+	s.NotContains(logged, "5550001111")
+	s.NotContains(logged, "sip-")
+}
+
+// loggedAs is id as the log spells it: a call named for the suite's number holds it masked.
+func (s *CallHooksSuite) loggedAs(id string) string {
+	return strings.Replace(id, s.e164, "+1•••"+s.e164[len(s.e164)-2:], 1)
+}
+
+// loggedLine reports whether one line of the log holds every part.
+func (s *CallHooksSuite) loggedLine(parts ...string) bool {
+	for line := range strings.Lines(s.logged.String()) {
+		found := true
+		for _, part := range parts {
+			found = found && strings.Contains(line, part)
+		}
+		if found {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *CallHooksSuite) TestACallEveryWorkerIsTooBusyForIsEnded() {
 	s.hold("default", s.callID)
 	worker, release := s.dispatch.Register(s.customerID(), dispatch.Registration{Capacity: 1, Active: 1, Tracking: true})
@@ -347,7 +405,7 @@ func (s *CallHooksSuite) refused() bool {
 // running when its test ends cannot race with the next one.
 func (s *CallHooksSuite) refusedCall(callID string) bool {
 	for _, line := range strings.Split(s.logged.String(), "\n") {
-		if strings.Contains(line, "refused an arriving call") && strings.Contains(line, callID) {
+		if strings.Contains(line, "refused an arriving call") && strings.Contains(line, s.loggedAs(callID)) {
 			return true
 		}
 	}
@@ -768,6 +826,7 @@ func (s *CallHooksSuite) TestAnEndedCallRingingANumberNobodyHoldsIsWarnedAbout()
 	s.Require().Equal(http.StatusOK, s.end(fmt.Sprintf(`{"phone_number":%q}`, s.e164)))
 
 	s.Contains(s.logged.String(), "could not tell whose number an ended call rang")
+	s.NotContains(s.logged.String(), "no number +1•••"+s.e164[len(s.e164)-2:]+" is attached")
 	s.NotContains(s.logged.String(), "no number "+s.e164+" is attached")
 }
 
@@ -801,7 +860,7 @@ func (s *CallHooksSuite) TestTheWebhookIsAnsweredBeforeTheStatsAreRead() {
 func (s *CallHooksSuite) sitesLine() string {
 	var found []string
 	for line := range strings.Lines(s.logged.String()) {
-		if strings.Contains(line, `msg="phone call sites"`) && strings.Contains(line, "session_id="+s.callID+" ") {
+		if strings.Contains(line, `msg="phone call sites"`) && strings.Contains(line, "session_id="+s.loggedAs(s.callID)+" ") {
 			found = append(found, line)
 		}
 	}
