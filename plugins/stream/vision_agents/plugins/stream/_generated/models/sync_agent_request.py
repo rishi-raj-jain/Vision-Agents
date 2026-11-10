@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from ..models.agent_dispatch import AgentDispatch
     from ..models.agent_scheduling import AgentScheduling
     from ..models.agent_tools import AgentTools
+    from ..models.child_agent import ChildAgent
     from ..models.floor_control import FloorControl
     from ..models.greeting import Greeting
     from ..models.knowledge_document import KnowledgeDocument
@@ -139,6 +140,9 @@ class SyncAgentRequest:
             voice (str | Unset): The voice the agent speaks in, as TtsOptions.voice takes it: a provider's own voice id, or
                 one of your voices, with the custom: prefix to mean only yours. A native agent (sts) takes the vendor's own
                 voice name instead.
+            agents (list[ChildAgent] | Unset): agent.yaml's agents: the app's other text agents this one may hand work to,
+                each as a tool, by name. Sent, they replace the stored list whole, an empty list removing it; left out, the
+                stored list stays. An agent named must already exist, so a directory is synced after the agents it names.
     """
 
     hash_: str
@@ -180,6 +184,7 @@ class SyncAgentRequest:
     tts: str | Unset = UNSET
     video: SessionVideo | Unset = UNSET
     voice: str | Unset = UNSET
+    agents: list[ChildAgent] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -346,6 +351,13 @@ class SyncAgentRequest:
 
         voice = self.voice
 
+        agents: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.agents, Unset):
+            agents = []
+            for agents_item_data in self.agents:
+                agents_item = agents_item_data.to_dict()
+                agents.append(agents_item)
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -428,6 +440,8 @@ class SyncAgentRequest:
             field_dict["video"] = video
         if voice is not UNSET:
             field_dict["voice"] = voice
+        if agents is not UNSET:
+            field_dict["agents"] = agents
 
         return field_dict
 
@@ -439,6 +453,7 @@ class SyncAgentRequest:
         from ..models.agent_dispatch import AgentDispatch
         from ..models.agent_scheduling import AgentScheduling
         from ..models.agent_tools import AgentTools
+        from ..models.child_agent import ChildAgent
         from ..models.floor_control import FloorControl
         from ..models.greeting import Greeting
         from ..models.knowledge_document import KnowledgeDocument
@@ -703,6 +718,15 @@ class SyncAgentRequest:
 
         voice = d.pop("voice", UNSET)
 
+        _agents = d.pop("agents", UNSET)
+        agents: list[ChildAgent] | Unset = UNSET
+        if _agents is not UNSET:
+            agents = []
+            for agents_item_data in _agents:
+                agents_item = ChildAgent.from_dict(agents_item_data)
+
+                agents.append(agents_item)
+
         sync_agent_request = cls(
             hash_=hash_,
             name=name,
@@ -743,6 +767,7 @@ class SyncAgentRequest:
             tts=tts,
             video=video,
             voice=voice,
+            agents=agents,
         )
 
         sync_agent_request.additional_properties = d

@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from ..models.agent_review import AgentReview
     from ..models.agent_scheduling import AgentScheduling
     from ..models.agent_tools import AgentTools
+    from ..models.child_agent import ChildAgent
     from ..models.floor_control import FloorControl
     from ..models.greeting import Greeting
     from ..models.resume_history import ResumeHistory
@@ -149,6 +150,12 @@ class AgentConfigRequest:
             response that has started is never moved, however slowly it goes on. Omitted or null on an update, the list
             stored stays as it is; an empty list removes it. A target this deployment does not route, or one with no
             instance in the agent's region, is refused.
+        agents (list[ChildAgent] | Unset): The app's other text agents this one may hand work to, each offered to its
+            model as a tool that takes one string, input, and answers with what that agent said last. Several called in one
+            reply run at once, at most 8 at a time. Each runs as an incognito run of its own, on its own llm, instructions,
+            connectors and sandbox, and its spend is added to the parent run's usage. Only a text agent has them, and an
+            agent named here must be a text agent with no agents of its own and not this one. Omitted or null on an update,
+            the list stored stays as it is; an empty list removes it.
     """
 
     name: str
@@ -188,6 +195,7 @@ class AgentConfigRequest:
     visible_tools: list[str] | Unset = UNSET
     voice: str | Unset = UNSET
     llm_fallbacks: list[str] | Unset = UNSET
+    agents: list[ChildAgent] | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -335,6 +343,13 @@ class AgentConfigRequest:
         if not isinstance(self.llm_fallbacks, Unset):
             llm_fallbacks = self.llm_fallbacks
 
+        agents: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.agents, Unset):
+            agents = []
+            for agents_item_data in self.agents:
+                agents_item = agents_item_data.to_dict()
+                agents.append(agents_item)
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -414,6 +429,8 @@ class AgentConfigRequest:
             field_dict["voice"] = voice
         if llm_fallbacks is not UNSET:
             field_dict["llm_fallbacks"] = llm_fallbacks
+        if agents is not UNSET:
+            field_dict["agents"] = agents
 
         return field_dict
 
@@ -436,6 +453,7 @@ class AgentConfigRequest:
         from ..models.agent_review import AgentReview
         from ..models.agent_scheduling import AgentScheduling
         from ..models.agent_tools import AgentTools
+        from ..models.child_agent import ChildAgent
         from ..models.floor_control import FloorControl
         from ..models.greeting import Greeting
         from ..models.resume_history import ResumeHistory
@@ -650,6 +668,15 @@ class AgentConfigRequest:
 
         llm_fallbacks = cast(list[str], d.pop("llm_fallbacks", UNSET))
 
+        _agents = d.pop("agents", UNSET)
+        agents: list[ChildAgent] | Unset = UNSET
+        if _agents is not UNSET:
+            agents = []
+            for agents_item_data in _agents:
+                agents_item = ChildAgent.from_dict(agents_item_data)
+
+                agents.append(agents_item)
+
         agent_config_request = cls(
             name=name,
             calls=calls,
@@ -688,6 +715,7 @@ class AgentConfigRequest:
             visible_tools=visible_tools,
             voice=voice,
             llm_fallbacks=llm_fallbacks,
+            agents=agents,
         )
 
         agent_config_request.additional_properties = d
